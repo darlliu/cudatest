@@ -161,8 +161,7 @@ __global__ void routine2(const int* const in, int* const out, const int r, const
     tmp[tx]=val;
     __syncthreads();
     int idx2, val2, flag=2;
-
-    if (val != 0)
+    if (val == 1)
         for (int xoff = -1; xoff < 2; ++xoff)
             for (int yoff = -1; yoff < 2; ++yoff)
             {
@@ -203,17 +202,18 @@ void your_blend(const uchar4* const h_sourceImg, //IN
 
     int *d_i1, *d_i2;
     checkCudaErrors(cudaMalloc((void **)&d_i1, sizeof(int)*len));
-    //checkCudaErrors(cudaMalloc((void **)&d_i2, sizeof(int)*len));
+    checkCudaErrors(cudaMalloc((void **)&d_i2, sizeof(int)*len));
 
 
     int* h_tt = (int*) malloc(sizeof(int)*len);
     routine1 <<<dim3(r,c,1), dim3(xdim,ydim,1) >>> (
             d_src,d_i1, d_r1, d_g1, d_b1, numRowsSource, numColsSource );
 
-    checkCudaErrors(cudaDeviceSynchronize());
-    checkCudaErrors(cudaGetLastError());
+    checkCudaErrors(cudaDeviceSynchronize()); checkCudaErrors(cudaGetLastError());
+    routine2 <<<dim3(r,c,1), dim3(xdim,ydim,1) >>> (d_i1, d_i2, numRowsSource, numColsSource );
+    checkCudaErrors(cudaDeviceSynchronize()); checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaMemcpy(h_tt, d_i1,sizeof(int)*len, cudaMemcpyDeviceToHost));
-    int sum = 0,sum2=0;
+    int sum = 0,sum2=0, sum3=0, sum4=0;
     for (int i = 0; i<len; ++i)
     {
         if (h_sourceImg[i].x!=255&&h_sourceImg[i].y!=255&&h_sourceImg[i].z!=255)
@@ -221,6 +221,13 @@ void your_blend(const uchar4* const h_sourceImg, //IN
         sum+=h_tt[i];
     }
     printf("total is %d, got %d serial %d parallel\n", len,sum2, sum);
+    checkCudaErrors(cudaMemcpy(h_tt, d_i2,sizeof(int)*len, cudaMemcpyDeviceToHost));
+    for (int i = 0; i<len; ++i)
+    {
+        if (h_tt[i]==1) sum3++;
+        else if (h_tt[i]==2) sum4++;
+    }
+    printf("total is %d, got %d inner %d boundary\n", sum,sum3, sum4);
     //printf("total is %d, got %d \n", len,h_tt[len-1]+1);
    /* To Recap here are the steps you need to implement
 
