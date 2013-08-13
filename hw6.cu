@@ -131,11 +131,14 @@ __global__ void routine1(const uchar4* const d_src,
     flag = val.x == 255 ? 0: flag;
     flag = val.y == 255 ? 0: flag;
     flag = val.z == 255 ? 0: flag;
+    
+    d_i[idx] = flag;
+    if (flag==0) return;
     //consider changing this to iff
     d_r[idx] = (float)val.x;
     d_g[idx] = (float)val.y;
-    d_b[idx] = (float)val.b;
-    d_i[idx] = flag;
+    d_b[idx] = (float)val.z;
+
     return;
 };
 void your_blend(const uchar4* const h_sourceImg,  //IN
@@ -143,39 +146,40 @@ void your_blend(const uchar4* const h_sourceImg,  //IN
         const uchar4* const h_destImg, //IN
         uchar4* const h_blendedImg) //OUT
 {
-    const unsigned int len = numRowsSource*numColSource, r = (numRowsSource+bdim-1)/xdim,\
-                             c = (numRowsSource+bdim-1)/ydim;
+    const unsigned int len = numRowsSource*numColsSource, r = (numRowsSource+xdim-1)/xdim,\
+                             c = (numColsSource+ydim-1)/ydim;
     uchar4* d_src ;
-    checkCudaErrors(cudaMalloc(d_src, sizeof(uchar4)*len));
-    checkCudaErrors(cudaMemcpy(d_src, h_sourceImg, cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMalloc((void **)&d_src, sizeof(uchar4)*len));
+    checkCudaErrors(cudaMemcpy(d_src, h_sourceImg, sizeof(uchar4)*len, cudaMemcpyHostToDevice));
     float *d_r1, *d_r2, *d_g1, *d_g2, *d_b1, *d_b2;
-    checkCudaErrors(cudaMalloc(d_r1, sizeof(float)*len));
-    checkCudaErrors(cudaMalloc(d_r1, sizeof(float)*len));
-    checkCudaErrors(cudaMalloc(d_g1, sizeof(float)*len));
-    checkCudaErrors(cudaMalloc(d_g2, sizeof(float)*len));
-    checkCudaErrors(cudaMalloc(d_b1, sizeof(float)*len));
-    checkCudaErrors(cudaMalloc(d_b2, sizeof(float)*len));
+    checkCudaErrors(cudaMalloc((void **)&d_r1, sizeof(float)*len));
+    //checkCudaErrors(cudaMalloc((void **)&d_r2, sizeof(float)*len));
+    checkCudaErrors(cudaMalloc((void **)&d_g1, sizeof(float)*len));
+    //checkCudaErrors(cudaMalloc((void **)&d_g2, sizeof(float)*len));
+    checkCudaErrors(cudaMalloc((void **)&d_b1, sizeof(float)*len));
+    //checkCudaErrors(cudaMalloc((void **)&d_b2, sizeof(float)*len));
 
     int *d_i1, *d_i2;
-    checkCudaErrors(cudaMalloc(d_i1, sizeof(int)*len));
-    checkCudaErrors(cudaMalloc(d_i2, sizeof(int)*len));
+    checkCudaErrors(cudaMalloc((void **)&d_i1, sizeof(int)*len));
+    //checkCudaErrors(cudaMalloc((void **)&d_i2, sizeof(int)*len));
 
 
-    int* h_tt = (int*) malloc(sizeof(int)*len);
+//    int* h_tt = (int*) malloc(sizeof(int)*len);
     routine1  <<<dim3(r,c,1), dim3(xdim,ydim,1) >>> (
-            d_src,d_i, d_r1, d_g1, d_b1, len );
+            d_src,d_i1, d_r1, d_g1, d_b1, len );
 
     checkCudaErrors(cudaDeviceSynchronize());
     checkCudaErrors(cudaGetLastError());
-    checkCudaErrors(cudaMemcpy(h_tt, d_i, cudaMemcpyDeviceToHost));
- 
+   // checkCudaErrors(cudaMemcpy(h_tt, d_i1,sizeof(int)*len,  cudaMemcpyDeviceToHost));
+ /*
     int sum = 0;
     for (int i = 0; i<len; ++i)
     {
         sum+=h_tt[i];
     }
-    printf("total is %d, got %d\n in", len, sum);
-    /* To Recap here are the steps you need to implement
+    printf("total is %d, got %d \n", len, sum);
+   */
+   /* To Recap here are the steps you need to implement
 
        1) Compute a mask of the pixels from the source image to be copied
        The pixels that shouldn't be copied are completely white, they
