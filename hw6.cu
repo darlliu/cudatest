@@ -69,15 +69,17 @@ In this assignment we will do 800 iterations.
 #include <thrust/host_vector.h>
 #include "reference_calc.cpp"
 #include <stdio.h>
-__device__ inline int getidx()
+__device__ inline int getidx(const int r, const int c)
 
 {
-    return threadIdx.x+\
-        blockDim.x*blockIdx.x+
-        (blockDim.x*gridDim.x)*(threadIdx.y+\
-                blockIdx.y*blockDim.y);
+    int xx =  threadIdx.x+ blockDim.x*blockIdx.x;
+    if (xx > r || xx < 0) return -1;
+    int yy = threadIdx.y + blockIdx.y*blockDim.y;
+    if (yy > c || yy < 0) return -1;
+    return xx + r*yy;
+    // row major
 };
-__device__ inline int getidx(const int xoff, const int yoff)
+__device__ inline int getidx(const int xoff, const int yoff, const int r)
 {
     int x,y, bx, by;
 
@@ -91,10 +93,11 @@ __device__ inline int getidx(const int xoff, const int yoff)
     y= yoff==0?threadIdx.y:y;
     by = yoff==0?0:by;
 
-    return x+\
-        blockDim.x*(y+\
-                (blockIdx.x+bx)*blockDim.y+\
-                (blockIdx.y+by)*gridDim.x*blockDim.y);
+    int xx =  x+ blockDim.x*(blockIdx.x+bx);
+    if (xx > r || xx < 0) return -1;
+    int yy =  y+ blockDim.y*(blockIdx.y+by);
+    if (yy > c || yy < 0) return -1;
+    return xx + r*yy;
 };
 __device__ inline int gettx()
 {
@@ -124,15 +127,15 @@ void swap (const S* a, const T* b)
 };
 __global__ void routine1(const uchar4* const d_src,
         int* const d_i, float* const d_r, float* const d_g, float * const d_b,
-        const int len)
+        const int r, const int c)
 {
     int idx = getidx();
     if (idx >= len) return;
     uchar4 val = d_src[idx];
     int flag = 1;
-    flag = (int)val.x == 255 ? 0: flag;
-    flag = (int)val.y == 255 ? 0: flag;
-    flag = (int)val.z == 255 ? 0: flag;
+    flag = val.x == 255 ? 0: flag;
+    flag = val.y == 255 ? 0: flag;
+    flag = val.z == 255 ? 0: flag;
     
     d_i[idx] = flag;
     if (flag==0) return;
