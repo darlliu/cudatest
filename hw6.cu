@@ -64,7 +64,7 @@
 
 #define xdim 16
 #define ydim 16
-
+#define bdim xdim*ydim
 #include "utils.h"
 #include <thrust/host_vector.h>
 #include "reference_calc.cpp"
@@ -111,15 +111,17 @@ __device__ inline int getoffset()
 // For this project we use a 2d grid and a 2d block
 
 template <typename S, typename T>
+    __global__
     inline void swap (const S* a, const T* b)
 {
+
+    if (getidx()!=0) return;
     void* tmp;
     tmp = (void*)b;
     b = (T*)((void*)a);
     a = (S*)((void*)b);
     return;
 };
-
 __global__ void routine1(const uchar4* const d_src,
         int* const d_i, float* const d_r, float* const d_g, float * const d_b,
         const int len)
@@ -139,6 +141,42 @@ __global__ void routine1(const uchar4* const d_src,
     d_g[idx] = (float)val.y;
     d_b[idx] = (float)val.z;
 
+    return;
+};
+
+
+__global__ void routine2(const int* const in, const int* const out, const int len)
+    //Computes neighboring condition
+{
+    volatile __shared__ int tmp[bdim];
+    int idx = getidx();
+    int tx = gettx();
+    tmp[tx]=0;
+    __syncthreads();
+    if (idx >= len) return;
+    int val = in[idx];
+    tmp[tx]=val;
+    __syncthreads();
+    int idx2, val2, flag=2;
+    if (val != 0)
+        for (int xoff = -1; xoff < 2; ++xoff)
+            for (int yoff = -1; yoff < 2; ++yoff)
+            {
+                if (threadIdx.x+xoff>=0 && threadIdx.x+xoff<xdim\
+                        && threadIdx.y+yoff>=0 && threaIdx.y+yoff<ydim)
+                {
+                    idx2 = gettx(xoff+threadIdx.x, yoff+threadIdx.y);
+                    val2 = tmp[idx2];
+                }
+                else
+                {
+                    idx2 = getidx(xoff,yoff);
+                    val2 = in[idx2];
+                }
+                flag = val2 == 0? 1:flag;
+            }
+    else flag=0;
+    out[idx]= flag;
     return;
 };
 void your_blend(const uchar4* const h_sourceImg,  //IN
@@ -171,14 +209,14 @@ void your_blend(const uchar4* const h_sourceImg,  //IN
     checkCudaErrors(cudaDeviceSynchronize());
     checkCudaErrors(cudaGetLastError());
    // checkCudaErrors(cudaMemcpy(h_tt, d_i1,sizeof(int)*len,  cudaMemcpyDeviceToHost));
- /*
-    int sum = 0;
+    int sum = 0,sum2=0;
     for (int i = 0; i<len; ++i)
     {
+        if (h_sourceImg[i].x==255&&h_sourceImg[i].y==255&&h_sourceImg[i].z==255)
+            ++sum2;
         sum+=h_tt[i];
     }
-    printf("total is %d, got %d \n", len, sum);
-   */
+    printf("total is %d, got %d serial %d parallel\n", len,sum2, sum);
    /* To Recap here are the steps you need to implement
 
        1) Compute a mask of the pixels from the source image to be copied
