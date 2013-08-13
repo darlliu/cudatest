@@ -72,14 +72,14 @@ In this assignment we will do 800 iterations.
 __device__ inline int getidx(const int r, const int c)
 
 {
-    int xx =  threadIdx.x+ blockDim.x*blockIdx.x;
+    int xx = threadIdx.x+ blockDim.x*blockIdx.x;
     if (xx > r || xx < 0) return -1;
     int yy = threadIdx.y + blockIdx.y*blockDim.y;
     if (yy > c || yy < 0) return -1;
     return xx + r*yy;
     // row major
 };
-__device__ inline int getidx(const int xoff, const int yoff, const int r)
+__device__ inline int getidx(const int xoff, const int yoff, const int r, const int c)
 {
     int x,y, bx, by;
 
@@ -93,9 +93,9 @@ __device__ inline int getidx(const int xoff, const int yoff, const int r)
     y= yoff==0?threadIdx.y:y;
     by = yoff==0?0:by;
 
-    int xx =  x+ blockDim.x*(blockIdx.x+bx);
+    int xx = x+ blockDim.x*(blockIdx.x+bx);
     if (xx > r || xx < 0) return -1;
-    int yy =  y+ blockDim.y*(blockIdx.y+by);
+    int yy = y+ blockDim.y*(blockIdx.y+by);
     if (yy > c || yy < 0) return -1;
     return xx + r*yy;
 };
@@ -115,10 +115,10 @@ __device__ inline int getoffset()
 
 template <typename S, typename T>
     __global__
-void swap (const S* a, const T* b)
+void swap (const S* a, const T* b, const int r, const int c)
 {
 
-    if (getidx()!=0) return;
+    if (getidx(r,c)!=0) return;
     void* tmp;
     tmp = (void*)b;
     b = (T*)((void*)a);
@@ -129,8 +129,8 @@ __global__ void routine1(const uchar4* const d_src,
         int* const d_i, float* const d_r, float* const d_g, float * const d_b,
         const int r, const int c)
 {
-    int idx = getidx();
-    if (idx >= len) return;
+    int idx = getidx(r,c);
+    if (idx == -1) return;
     uchar4 val = d_src[idx];
     int flag = 1;
     flag = val.x == 255 ? 0: flag;
@@ -148,15 +148,15 @@ __global__ void routine1(const uchar4* const d_src,
 };
 
 
-__global__ void routine2(const int* const in, int* const out, const int len)
+__global__ void routine2(const int* const in, int* const out, const int r, const int c)
     //Computes neighboring condition
 {
     volatile __shared__ int tmp[bdim];
-    int idx = getidx();
+    int idx = getidx(r,c);
     int tx = gettx();
     tmp[tx]=0;
     __syncthreads();
-    if (idx >= len) return;
+    if (idx == -1) return;
     int val = in[idx];
     tmp[tx]=val;
     __syncthreads();
@@ -174,7 +174,7 @@ __global__ void routine2(const int* const in, int* const out, const int len)
                 }
                 else
                 {
-                    idx2 = getidx(xoff,yoff);
+                    idx2 = getidx(xoff,yoff,r,c);
                     val2 = in[idx2];
                 }
                 flag = val2 == 0? 1:flag;
@@ -208,7 +208,7 @@ void your_blend(const uchar4* const h_sourceImg, //IN
 
     int* h_tt = (int*) malloc(sizeof(int)*len);
     routine1 <<<dim3(r,c,1), dim3(xdim,ydim,1) >>> (
-            d_src,d_i1, d_r1, d_g1, d_b1, len );
+            d_src,d_i1, d_r1, d_g1, d_b1, numRowsSource, numColsSource );
 
     checkCudaErrors(cudaDeviceSynchronize());
     checkCudaErrors(cudaGetLastError());
@@ -216,7 +216,7 @@ void your_blend(const uchar4* const h_sourceImg, //IN
     int sum = 0,sum2=0;
     for (int i = 0; i<len; ++i)
     {
-        if (h_sourceImg[i].x==255&&h_sourceImg[i].y==255&&h_sourceImg[i].z==255)
+        if (h_sourceImg[i].x!=255&&h_sourceImg[i].y!=255&&h_sourceImg[i].z!=255)
             ++sum2;
         sum+=h_tt[i];
     }
