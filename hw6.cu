@@ -139,7 +139,7 @@ void swap (float* a, float* b, const int r, const int c)
 };
 
 __global__ void routine1(const uchar4* const d_src,
-        int* const d_i, float* const d_r, float* const d_g, float * const d_b,
+        int* const d_i, float* const d_r, float* const d_g, float * const d_b, 
         const int r, const int c)
 {
     int idx = getidx(r,c);
@@ -151,8 +151,6 @@ __global__ void routine1(const uchar4* const d_src,
     flag = val.z == 255 ? 0: flag;
 
     d_i[idx] = flag;
-    if (flag==0) return;
-    //consider changing this to iff
     d_r[idx] = (float)val.x;
     d_g[idx] = (float)val.y;
     d_b[idx] = (float)val.z;
@@ -263,19 +261,30 @@ __global__ void jacobi
     {
         oo = val;
     }
-    out[idx]=oo;
+    if(flag!=0) out[idx]=oo;
     return;
 };
 __global__ void routine3(
         uchar4* const d_dst, float* const d_r, float* const d_g, float * const d_b,
+        float* const d_dr, float* const d_dg, float * const d_db, const int* const flags,
         const int r, const int c)
 {
     int idx = getidx(r,c);
     if (idx == -1) return;
+    int flag = flags[idx];
     uchar4 val;
-    val.x = (uchar) d_r[idx];
-    val.y = (uchar) d_g[idx];
-    val.z = (uchar) d_b[idx];
+    if (flag!=0)
+    {
+       val.x = (unsigned char) d_r[idx];
+       val.y = (unsigned char) d_g[idx];
+       val.z = (unsigned char) d_b[idx];
+    }    
+    else
+    {
+       val.x = (unsigned char) d_dr[idx];
+       val.y = (unsigned char) d_dg[idx];
+       val.z = (unsigned char) d_db[idx];
+    }
     d_dst[idx] = val;
     return;
 };
@@ -291,6 +300,7 @@ void your_blend(const uchar4* const h_sourceImg, //IN
     //checkCudaErrors(cudaHostRegister((void*)h_sourceImg,sizeof(uchar4)*len,cudaHostRegisterPortable));
     checkCudaErrors(cudaMalloc((void **)&d_src, sizeof(uchar4)*len));
     checkCudaErrors(cudaMalloc((void **)&d_dst, sizeof(uchar4)*len));
+    //checkCudaErrors(cudaMalloc((void **)&d_alpha, sizeof(unsigned char)*len));
     checkCudaErrors(cudaMemcpy(d_src, h_sourceImg, sizeof(uchar4)*len, cudaMemcpyHostToDevice));
     checkCudaErrors(cudaMemcpy(d_dst, h_destImg, sizeof(uchar4)*len, cudaMemcpyHostToDevice));
     
@@ -350,26 +360,26 @@ void your_blend(const uchar4* const h_sourceImg, //IN
     checkCudaErrors(cudaDeviceSynchronize());
     checkCudaErrors(cudaGetLastError());
 
-    routine3<<<G,B>>> (d_dst, d_r1, d_g1, d_b1, numRowsSource,numColsSource);
-    checkCudaErrors(cudaMemcpy(h_blendedImg, d_dst, sizeof(uchar)*len, cudaMemcpyDeviceToHost));
-/*    int* h_tt = (int*) malloc(sizeof(int)*len);
-    checkCudaErrors(cudaMemcpy(h_tt, d_i1,sizeof(int)*len, cudaMemcpyDeviceToHost));
-    int sum = 0,sum2=0, sum3=0, sum4=0;
-    for (int i = 0; i<len; ++i)
-    {
-        if (h_sourceImg[i].x!=255&&h_sourceImg[i].y!=255&&h_sourceImg[i].z!=255)
-            ++sum2;
-        sum+=h_tt[i];
-    }
-    printf("total is %d, got %d serial %d parallel\n", len,sum2, sum);
-    checkCudaErrors(cudaMemcpy(h_tt, d_i2,sizeof(int)*len, cudaMemcpyDeviceToHost));
-    for (int i = 0; i<len; ++i)
-    {
-        if (h_tt[i]==1) sum3++;
-        else if (h_tt[i]==2) sum4++;
-    }
-    printf("total is %d, got %d inner %d boundary\n", sum,sum3, sum4);
-    //printf("total is %d, got %d \n", len,h_tt[len-1]+1);*/
+    routine3<<<G,B>>> (d_dst, d_r1, d_g1, d_b1,d_dr, d_dg,d_db, d_i2, numRowsSource,numColsSource);
+    checkCudaErrors(cudaMemcpy(h_blendedImg, d_dst, sizeof(uchar4)*len, cudaMemcpyDeviceToHost));
+/* int* h_tt = (int*) malloc(sizeof(int)*len);
+checkCudaErrors(cudaMemcpy(h_tt, d_i1,sizeof(int)*len, cudaMemcpyDeviceToHost));
+int sum = 0,sum2=0, sum3=0, sum4=0;
+for (int i = 0; i<len; ++i)
+{
+if (h_sourceImg[i].x!=255&&h_sourceImg[i].y!=255&&h_sourceImg[i].z!=255)
+++sum2;
+sum+=h_tt[i];
+}
+printf("total is %d, got %d serial %d parallel\n", len,sum2, sum);
+checkCudaErrors(cudaMemcpy(h_tt, d_i2,sizeof(int)*len, cudaMemcpyDeviceToHost));
+for (int i = 0; i<len; ++i)
+{
+if (h_tt[i]==1) sum3++;
+else if (h_tt[i]==2) sum4++;
+}
+printf("total is %d, got %d inner %d boundary\n", sum,sum3, sum4);
+//printf("total is %d, got %d \n", len,h_tt[len-1]+1);*/
    /* To Recap here are the steps you need to implement
 
 1) Compute a mask of the pixels from the source image to be copied
