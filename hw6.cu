@@ -133,8 +133,8 @@ void swap (float* a, float* b, const int r, const int c)
     if (getidx(r,c)!=0) return;
     void* tmp;
     tmp = (void*)b;
-    b = (T*)((void*)a);
-    a = (S*)((void*)b);
+    b = (float*)((void*)a);
+    a = (float*)((void*)tmp);
     return;
 };
 
@@ -195,7 +195,7 @@ __global__ void routine2(const int* const in, int* const out, const int r, const
     return;
 };
 
-__global__ void jacobi 
+__global__ void jacobi
         (const float* const in, float* const out,const float* const dst,
          const int* const flags, const int r, const int c)
 //jacobi routine note that each successive cycle should be followed by a pointer swap
@@ -206,7 +206,7 @@ __global__ void jacobi
     int idx = getidx(r,c);
     int tx = gettx();
     tmp[tx]=0;
-    tmp_flags[tx]=0f;
+    tmp_flags[tx]=0;
     __syncthreads();
     if (idx==-1) return;
     // initialize the shared memory then close most threads
@@ -219,8 +219,8 @@ __global__ void jacobi
     //initialize shared cache to actual interate vals
 
     float val2, val3;
-    int flag2;
-    float sum1=0f, sum2=0f;
+    int idx2, flag2;
+    float sum1=0, sum2=0;
     int xoff, yoff;
     float oo;
     // variable allocations
@@ -246,18 +246,18 @@ __global__ void jacobi
                     val2 = in[idx2];
                     val3 = dst[idx2];
                 }
-                if (flag == 2)
+                if (flag2 == 2)
                 {
                     sum1 += val2;
                 }
-                else if (flag ==1)
+                else if (flag2 ==1)
                 {
                     sum1 += val3;
                 }
-                sum2 += val-val2;
                 else continue;
+                sum2 += val-val2;
             }
-        oo = min(255f, max(0f, (sum1+sum2)/4.f));
+        oo = min(255.f, max(0.f, (sum1+sum2)/4.f));
     }
     else
     {
@@ -274,7 +274,7 @@ void your_blend(const uchar4* const h_sourceImg, //IN
 {
     const unsigned int len = numRowsSource*numColsSource, r = (numRowsSource+xdim-1)/xdim,\
                              c = (numColsSource+ydim-1)/ydim;
-    uchar4* d_src , d_dst;
+    uchar4* d_src , *d_dst;
     //checkCudaErrors(cudaHostRegister((void*)h_sourceImg,sizeof(uchar4)*len,cudaHostRegisterPortable));
     checkCudaErrors(cudaMalloc((void **)&d_src, sizeof(uchar4)*len));
     checkCudaErrors(cudaMalloc((void **)&d_dst, sizeof(uchar4)*len));
@@ -290,16 +290,16 @@ void your_blend(const uchar4* const h_sourceImg, //IN
     checkCudaErrors(cudaMalloc((void **)&d_i1, sizeof(int)*len));
     checkCudaErrors(cudaMalloc((void **)&d_i2, sizeof(int)*len));
 
-    float *d_dr, *d_dg, *d_gb;
+    float *d_dr, *d_dg, *d_db;
     checkCudaErrors(cudaMalloc((void **)&d_dr, sizeof(float)*len));
     checkCudaErrors(cudaMalloc((void **)&d_dg, sizeof(float)*len));
     checkCudaErrors(cudaMalloc((void **)&d_db, sizeof(float)*len));
     routine0 <<<dim3(r,c,1), dim3(xdim,ydim,1) >>> (
             d_dst,d_dr, d_dg, d_db, numRowsSource, numColsSource );
-
+    checkCudaErrors(cudaDeviceSynchronize()); checkCudaErrors(cudaGetLastError());
+    
     routine1 <<<dim3(r,c,1), dim3(xdim,ydim,1) >>> (
             d_src,d_i1, d_r1, d_g1, d_b1, numRowsSource, numColsSource );
-
     checkCudaErrors(cudaDeviceSynchronize()); checkCudaErrors(cudaGetLastError());
     
     routine2 <<<dim3(r,c,1), dim3(xdim,ydim,1) >>> (d_i1, d_i2, numRowsSource, numColsSource );
