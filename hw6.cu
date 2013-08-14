@@ -72,14 +72,14 @@ In this assignment we will do 800 iterations.
 __device__ inline int getidx(const int r, const int c)
 
 {
-    int xx = threadIdx.x+ blockDim.x*blockIdx.x;
-    if (xx > r || xx < 0) return -1;
-    int yy = threadIdx.y + blockIdx.y*blockDim.y;
-    if (yy > c || yy < 0) return -1;
+    int xx = threadIdx.x+ xdim*blockIdx.x;
+    if (xx >= r || xx < 0) return -1;
+    int yy = threadIdx.y + ydim*blockIdx.y;
+    if (yy >= c || yy < 0) return -1;
     return xx + r*yy;
     // row major
 };
-/*
+
 __device__ inline int getidx(const int xoff, const int yoff, const int r, const int c)
 {
     int x,y, bx, by;
@@ -95,15 +95,15 @@ __device__ inline int getidx(const int xoff, const int yoff, const int r, const 
     by = yoff==0?0:by;
 
     int xx = x+ blockDim.x*(blockIdx.x+bx);
-    if (xx > r || xx < 0) return -1;
+    if (xx >= r || xx < 0) return -1;
     int yy = y+ blockDim.y*(blockIdx.y+by);
-    if (yy > c || yy < 0) return -1;
+    if (yy >= c || yy < 0) return -1;
     return xx + r*yy;
-};*/
+};
 
 __device__ inline int gettx()
 {
-    return threadIdx.x+threadIdx.y*blockDim.x;
+    return threadIdx.x+threadIdx.y*xdim;
 };
 __device__ inline int gettx(const int x, const int y)
 {
@@ -181,19 +181,19 @@ __global__ void routine2(const int* const in, int* const out, const int r, const
                 xx = (int)threadIdx.x+xoff;
                 yy = (int)threadIdx.y+yoff;
                 //here we have local x y coord
-                if (xx>=0 && xx<xdim\ && xx>=0 && yy<ydim)
+                if (xx>=0 && xx<xdim && yy>=0 && yy<ydim)
                 {
-                    idx2 = gettx(xx, yy);
+                    idx2 = xx+xdim*yy;
                     val2 = tmp[idx2];
                 }
                 else
                 {
-                    xx = xx + blockDim.x*blockIdx.x;
-                    yy = yy + blockDim.y*blockIdx.y;
+                    xx = xx + xdim*blockIdx.x;
+                    yy = yy + ydim*blockIdx.y;
                     idx2 = xx+yy*r;
                     //remaps to global coord
                     if (xx >= 0 && xx < r && yy>=0 && yy<c )
-                        val2 = in[idx];
+                        val2 = in[idx2];
                     else val2=0;
                 }
                 flag = val2 == 0? 1:flag;
@@ -306,6 +306,8 @@ void your_blend(const uchar4* const h_sourceImg, //IN
 {
     const unsigned int len = numRowsSource*numColsSource, r = (numRowsSource+xdim-1)/xdim,\
                              c = (numColsSource+ydim-1)/ydim;
+    dim3 G(r,c,1), B(xdim,ydim,1);
+    
     uchar4* d_src , *d_dst;
     //checkCudaErrors(cudaHostRegister((void*)h_sourceImg,sizeof(uchar4)*len,cudaHostRegisterPortable));
     checkCudaErrors(cudaMalloc((void **)&d_src, sizeof(uchar4)*len));
@@ -322,11 +324,13 @@ void your_blend(const uchar4* const h_sourceImg, //IN
     int *d_i1, *d_i2;
     checkCudaErrors(cudaMalloc((void **)&d_i1, sizeof(int)*len));
     checkCudaErrors(cudaMalloc((void **)&d_i2, sizeof(int)*len));
-    dim3 G(r,c,1), B(xdim,ydim,1);
+    
+
     float *d_dr, *d_dg, *d_db;
     checkCudaErrors(cudaMalloc((void **)&d_dr, sizeof(float)*len));
     checkCudaErrors(cudaMalloc((void **)&d_dg, sizeof(float)*len));
     checkCudaErrors(cudaMalloc((void **)&d_db, sizeof(float)*len));
+    
     routine0 <<<G,B >>> (
             d_dst,d_dr, d_dg, d_db, numRowsSource, numColsSource );
     checkCudaErrors(cudaDeviceSynchronize()); checkCudaErrors(cudaGetLastError());
@@ -340,7 +344,7 @@ void your_blend(const uchar4* const h_sourceImg, //IN
 
     /*cudaFree(d_i1);*/
     cudaFree(d_src);
-
+/*
     cudaStream_t sa, sb, sc;
     cudaStreamCreate(&sa);
     cudaStreamCreate(&sb);
@@ -372,7 +376,7 @@ void your_blend(const uchar4* const h_sourceImg, //IN
 
     routine3<<<G,B>>> (d_dst, d_r1, d_g1, d_b1,d_dr, d_dg,d_db, d_i2, numRowsSource,numColsSource);
     checkCudaErrors(cudaMemcpy(h_blendedImg, d_dst, sizeof(uchar4)*len, cudaMemcpyDeviceToHost));
-
+*/
     int* h_tt = (int*) malloc(sizeof(int)*len);
     checkCudaErrors(cudaMemcpy(h_tt, d_i1,sizeof(int)*len, cudaMemcpyDeviceToHost));
     int sum = 0,sum2=0, sum3=0, sum4=0;
@@ -390,7 +394,7 @@ void your_blend(const uchar4* const h_sourceImg, //IN
         else if (h_tt[i]==2) sum4++;
     }
     printf("total is %d, got %d inner %d boundary\n", sum,sum3, sum4);
-    printf("total is %d, got %d \n", len,h_tt[len-1]+1);
+    //printf("total is %d, got %d \n", len,h_tt[len-1]+1);
    /* To Recap here are the steps you need to implement
 
 1) Compute a mask of the pixels from the source image to be copied
