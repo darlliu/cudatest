@@ -106,16 +106,28 @@ __device__ inline int gettx()
 __device__ inline int gettx(const int x, const int y)
 {
     return x+y*blockDim.x;
-}
+};
 __device__ inline int getoffset()
 {
     return blockDim.x*blockDim.y*gridDim.x*gridDim.y;
 };
 // For this project we use a 2d grid and a 2d block
 
-template <typename S, typename T>
-    __global__
-void swap (const S* a, const T* b, const int r, const int c)
+__global__ void routine0(
+        const uchar4* const d_src, float* const d_r, float* const d_g, float * const d_b,
+        const int r, const int c)
+{
+    int idx = getidx(r,c);
+    if (idx == -1) return;
+    uchar4 val = d_src[idx];
+    d_r[idx] = (float)val.x;
+    d_g[idx] = (float)val.y;
+    d_b[idx] = (float)val.z;
+    return;
+};
+
+__global__
+void swap (float* a, float* b, const int r, const int c)
 {
 
     if (getidx(r,c)!=0) return;
@@ -125,6 +137,7 @@ void swap (const S* a, const T* b, const int r, const int c)
     a = (S*)((void*)b);
     return;
 };
+
 __global__ void routine1(const uchar4* const d_src,
         int* const d_i, float* const d_r, float* const d_g, float * const d_b,
         const int r, const int c)
@@ -136,7 +149,7 @@ __global__ void routine1(const uchar4* const d_src,
     flag = val.x == 255 ? 0: flag;
     flag = val.y == 255 ? 0: flag;
     flag = val.z == 255 ? 0: flag;
-    
+
     d_i[idx] = flag;
     if (flag==0) return;
     //consider changing this to iff
@@ -146,7 +159,6 @@ __global__ void routine1(const uchar4* const d_src,
 
     return;
 };
-
 
 __global__ void routine2(const int* const in, int* const out, const int r, const int c)
     //Computes neighboring condition
@@ -182,6 +194,79 @@ __global__ void routine2(const int* const in, int* const out, const int r, const
     out[idx]= flag;
     return;
 };
+
+__global__ void jacobi 
+        (const float* const in, float* const out,const float* const dst,
+         const int* const flags, const int r, const int c)
+//jacobi routine note that each successive cycle should be followed by a pointer swap
+{
+    volatile __shared__ int tmp_flags[bdim];
+    volatile __shared__ float tmp[bdim];
+    volatile __shared__ float tmp2[bdim];
+    int idx = getidx(r,c);
+    int tx = gettx();
+    tmp[tx]=0;
+    tmp_flags[tx]=0f;
+    __syncthreads();
+    if (idx==-1) return;
+    // initialize the shared memory then close most threads
+    float val = in[idx], dst_val=dst[idx];
+    int flag = flags[idx];
+    tmp_flags[tx]=flag;
+    tmp[tx] = val;
+    tmp2[tx]=dst_val;
+    __syncthreads();
+    //initialize shared cache to actual interate vals
+
+    float val2, val3;
+    int flag2;
+    float sum1=0f, sum2=0f;
+    int xoff, yoff;
+    float oo;
+    // variable allocations
+    
+    if (flag == 2) // only for interior pts
+    {
+
+        for (xoff = -1; xoff != 2; ++xoff)
+            for (yoff = -1; yoff != 2; ++yoff)
+            {
+                if ((int)threadIdx.x+xoff>=0 && (int)threadIdx.x+xoff<xdim\
+                        && (int)threadIdx.y+yoff>=0 && (int)threadIdx.y+yoff<ydim)
+                {
+                    idx2 = gettx(xoff+(int)threadIdx.x, yoff+(int)threadIdx.y);
+                    flag2 = tmp_flags[idx2];
+                    val2 = tmp[idx2];
+                    val3 = tmp2[idx2];
+                }
+                else
+                {
+                    idx2 = getidx(xoff,yoff,r,c);
+                    flag2 = flags[idx2];
+                    val2 = in[idx2];
+                    val3 = dst[idx2];
+                }
+                if (flag == 2)
+                {
+                    sum1 += val2;
+                }
+                else if (flag ==1)
+                {
+                    sum1 += val3;
+                }
+                sum2 += val-val2;
+                else continue;
+            }
+        oo = min(255f, max(0f, (sum1+sum2)/4.f));
+    }
+    else
+    {
+        oo = val;
+    }
+    out[idx]=oo;
+    return;
+};
+
 void your_blend(const uchar4* const h_sourceImg, //IN
         const size_t numRowsSource, const size_t numColsSource,
         const uchar4* const h_destImg, //IN
@@ -189,13 +274,14 @@ void your_blend(const uchar4* const h_sourceImg, //IN
 {
     const unsigned int len = numRowsSource*numColsSource, r = (numRowsSource+xdim-1)/xdim,\
                              c = (numColsSource+ydim-1)/ydim;
-    uchar4* d_src ;
+    uchar4* d_src , d_dst;
     //checkCudaErrors(cudaHostRegister((void*)h_sourceImg,sizeof(uchar4)*len,cudaHostRegisterPortable));
     checkCudaErrors(cudaMalloc((void **)&d_src, sizeof(uchar4)*len));
+    checkCudaErrors(cudaMalloc((void **)&d_dst, sizeof(uchar4)*len));
     checkCudaErrors(cudaMemcpy(d_src, h_sourceImg, sizeof(uchar4)*len, cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpy(d_dst, h_destImg, sizeof(uchar4)*len, cudaMemcpyHostToDevice));
     
     float *d_r1, *d_r2, *d_g1, *d_g2, *d_b1, *d_b2;
-    
     checkCudaErrors(cudaMalloc((void **)&d_r1, sizeof(float)*len));
     checkCudaErrors(cudaMalloc((void **)&d_g1, sizeof(float)*len));
     checkCudaErrors(cudaMalloc((void **)&d_b1, sizeof(float)*len));
@@ -204,7 +290,12 @@ void your_blend(const uchar4* const h_sourceImg, //IN
     checkCudaErrors(cudaMalloc((void **)&d_i1, sizeof(int)*len));
     checkCudaErrors(cudaMalloc((void **)&d_i2, sizeof(int)*len));
 
-
+    float *d_dr, *d_dg, *d_gb;
+    checkCudaErrors(cudaMalloc((void **)&d_dr, sizeof(float)*len));
+    checkCudaErrors(cudaMalloc((void **)&d_dg, sizeof(float)*len));
+    checkCudaErrors(cudaMalloc((void **)&d_db, sizeof(float)*len));
+    routine0 <<<dim3(r,c,1), dim3(xdim,ydim,1) >>> (
+            d_dst,d_dr, d_dg, d_db, numRowsSource, numColsSource );
 
     routine1 <<<dim3(r,c,1), dim3(xdim,ydim,1) >>> (
             d_src,d_i1, d_r1, d_g1, d_b1, numRowsSource, numColsSource );
