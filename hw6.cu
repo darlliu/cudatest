@@ -266,6 +266,19 @@ __global__ void jacobi
     out[idx]=oo;
     return;
 };
+__global__ void routine3(
+        uchar4* const d_dst, float* const d_r, float* const d_g, float * const d_b,
+        const int r, const int c)
+{
+    int idx = getidx(r,c);
+    if (idx == -1) return;
+    uchar4 val;
+    val.x = (uchar) d_r[idx];
+    val.y = (uchar) d_g[idx];
+    val.z = (uchar) d_b[idx];
+    d_dst[idx] = val;
+    return;
+};
 
 void your_blend(const uchar4* const h_sourceImg, //IN
         const size_t numRowsSource, const size_t numColsSource,
@@ -306,6 +319,7 @@ void your_blend(const uchar4* const h_sourceImg, //IN
     checkCudaErrors(cudaDeviceSynchronize()); checkCudaErrors(cudaGetLastError());
 
     cudaFree(d_i1);
+    cudaFree(d_src);
 
     cudaStream_t sa, sb, sc;
     cudaStreamCreate(&sa);
@@ -335,6 +349,9 @@ void your_blend(const uchar4* const h_sourceImg, //IN
     }
     checkCudaErrors(cudaDeviceSynchronize());
     checkCudaErrors(cudaGetLastError());
+
+    routine3<<<G,B>>> (d_dst, d_r1, d_g1, d_b1, numRowsSource,numColsSource);
+    checkCudaErrors(cudaMemcpy(h_blendedImg, d_dst, sizeof(uchar)*len, cudaMemcpyDeviceToHost));
 /*    int* h_tt = (int*) malloc(sizeof(int)*len);
     checkCudaErrors(cudaMemcpy(h_tt, d_i1,sizeof(int)*len, cudaMemcpyDeviceToHost));
     int sum = 0,sum2=0, sum3=0, sum4=0;
