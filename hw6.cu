@@ -79,6 +79,7 @@ __device__ inline int getidx(const int r, const int c)
     return xx + r*yy;
     // row major
 };
+/*
 __device__ inline int getidx(const int xoff, const int yoff, const int r, const int c)
 {
     int x,y, bx, by;
@@ -98,7 +99,8 @@ __device__ inline int getidx(const int xoff, const int yoff, const int r, const 
     int yy = y+ blockDim.y*(blockIdx.y+by);
     if (yy > c || yy < 0) return -1;
     return xx + r*yy;
-};
+};*/
+
 __device__ inline int gettx()
 {
     return threadIdx.x+threadIdx.y*blockDim.x;
@@ -164,6 +166,7 @@ __global__ void routine2(const int* const in, int* const out, const int r, const
     volatile __shared__ int tmp[bdim];
     int idx = getidx(r,c);
     int tx = gettx();
+    int xx, yy;
     tmp[tx]=0;
     __syncthreads();
     if (idx == -1) return;
@@ -175,16 +178,23 @@ __global__ void routine2(const int* const in, int* const out, const int r, const
         for (int xoff = -1; xoff < 2; ++xoff)
             for (int yoff = -1; yoff < 2; ++yoff)
             {
-                if ((int)threadIdx.x+xoff>=0 && (int)threadIdx.x+xoff<xdim\
-                        && (int)threadIdx.y+yoff>=0 && (int)threadIdx.y+yoff<ydim)
+                xx = (int)threadIdx.x+xoff;
+                yy = (int)threadIdx.y+yoff;
+                //here we have local x y coord
+                if (xx>=0 && xx<xdim\ && xx>=0 && yy<ydim)
                 {
-                    idx2 = gettx(xoff+(int)threadIdx.x, yoff+(int)threadIdx.y);
+                    idx2 = gettx(xx, yy);
                     val2 = tmp[idx2];
                 }
                 else
                 {
-                    idx2 = getidx(xoff,yoff,r,c);
-                    val2 = in[idx2];
+                    xx = xx + blockDim.x*blockIdx.x;
+                    yy = yy + blockDim.y*blockIdx.y;
+                    idx2 = xx+yy*r;
+                    //remaps to global coord
+                    if (xx >= 0 && xx < r && yy>=0 && yy<c )
+                        val2 = in[idx];
+                    else val2=0;
                 }
                 flag = val2 == 0? 1:flag;
             }
@@ -328,7 +338,7 @@ void your_blend(const uchar4* const h_sourceImg, //IN
     routine2 <<<G,B >>> (d_i1, d_i2, numRowsSource, numColsSource );
     checkCudaErrors(cudaDeviceSynchronize()); checkCudaErrors(cudaGetLastError());
 
-    cudaFree(d_i1);
+    /*cudaFree(d_i1);*/
     cudaFree(d_src);
 
     cudaStream_t sa, sb, sc;
@@ -362,24 +372,25 @@ void your_blend(const uchar4* const h_sourceImg, //IN
 
     routine3<<<G,B>>> (d_dst, d_r1, d_g1, d_b1,d_dr, d_dg,d_db, d_i2, numRowsSource,numColsSource);
     checkCudaErrors(cudaMemcpy(h_blendedImg, d_dst, sizeof(uchar4)*len, cudaMemcpyDeviceToHost));
-/* int* h_tt = (int*) malloc(sizeof(int)*len);
-checkCudaErrors(cudaMemcpy(h_tt, d_i1,sizeof(int)*len, cudaMemcpyDeviceToHost));
-int sum = 0,sum2=0, sum3=0, sum4=0;
-for (int i = 0; i<len; ++i)
-{
-if (h_sourceImg[i].x!=255&&h_sourceImg[i].y!=255&&h_sourceImg[i].z!=255)
-++sum2;
-sum+=h_tt[i];
-}
-printf("total is %d, got %d serial %d parallel\n", len,sum2, sum);
-checkCudaErrors(cudaMemcpy(h_tt, d_i2,sizeof(int)*len, cudaMemcpyDeviceToHost));
-for (int i = 0; i<len; ++i)
-{
-if (h_tt[i]==1) sum3++;
-else if (h_tt[i]==2) sum4++;
-}
-printf("total is %d, got %d inner %d boundary\n", sum,sum3, sum4);
-//printf("total is %d, got %d \n", len,h_tt[len-1]+1);*/
+
+    int* h_tt = (int*) malloc(sizeof(int)*len);
+    checkCudaErrors(cudaMemcpy(h_tt, d_i1,sizeof(int)*len, cudaMemcpyDeviceToHost));
+    int sum = 0,sum2=0, sum3=0, sum4=0;
+    for (int i = 0; i<len; ++i)
+    {
+        if (h_sourceImg[i].x!=255&&h_sourceImg[i].y!=255&&h_sourceImg[i].z!=255)
+            ++sum2;
+        sum+=h_tt[i];
+    }
+    printf("total is %d, got %d serial %d parallel\n", len,sum2, sum);
+    checkCudaErrors(cudaMemcpy(h_tt, d_i2,sizeof(int)*len, cudaMemcpyDeviceToHost));
+    for (int i = 0; i<len; ++i)
+    {
+        if (h_tt[i]==1) sum3++;
+        else if (h_tt[i]==2) sum4++;
+    }
+    printf("total is %d, got %d inner %d boundary\n", sum,sum3, sum4);
+    printf("total is %d, got %d \n", len,h_tt[len-1]+1);
    /* To Recap here are the steps you need to implement
 
 1) Compute a mask of the pixels from the source image to be copied
