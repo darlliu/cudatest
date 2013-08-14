@@ -190,28 +190,31 @@ void your_blend(const uchar4* const h_sourceImg, //IN
     const unsigned int len = numRowsSource*numColsSource, r = (numRowsSource+xdim-1)/xdim,\
                              c = (numColsSource+ydim-1)/ydim;
     uchar4* d_src ;
+    //checkCudaErrors(cudaHostRegister((void*)h_sourceImg,sizeof(uchar4)*len,cudaHostRegisterPortable));
     checkCudaErrors(cudaMalloc((void **)&d_src, sizeof(uchar4)*len));
     checkCudaErrors(cudaMemcpy(d_src, h_sourceImg, sizeof(uchar4)*len, cudaMemcpyHostToDevice));
+    
     float *d_r1, *d_r2, *d_g1, *d_g2, *d_b1, *d_b2;
+    
     checkCudaErrors(cudaMalloc((void **)&d_r1, sizeof(float)*len));
-    //checkCudaErrors(cudaMalloc((void **)&d_r2, sizeof(float)*len));
     checkCudaErrors(cudaMalloc((void **)&d_g1, sizeof(float)*len));
-    //checkCudaErrors(cudaMalloc((void **)&d_g2, sizeof(float)*len));
     checkCudaErrors(cudaMalloc((void **)&d_b1, sizeof(float)*len));
-    //checkCudaErrors(cudaMalloc((void **)&d_b2, sizeof(float)*len));
 
     int *d_i1, *d_i2;
     checkCudaErrors(cudaMalloc((void **)&d_i1, sizeof(int)*len));
     checkCudaErrors(cudaMalloc((void **)&d_i2, sizeof(int)*len));
 
 
-    int* h_tt = (int*) malloc(sizeof(int)*len);
+
     routine1 <<<dim3(r,c,1), dim3(xdim,ydim,1) >>> (
             d_src,d_i1, d_r1, d_g1, d_b1, numRowsSource, numColsSource );
 
     checkCudaErrors(cudaDeviceSynchronize()); checkCudaErrors(cudaGetLastError());
+    
     routine2 <<<dim3(r,c,1), dim3(xdim,ydim,1) >>> (d_i1, d_i2, numRowsSource, numColsSource );
     checkCudaErrors(cudaDeviceSynchronize()); checkCudaErrors(cudaGetLastError());
+
+    int* h_tt = (int*) malloc(sizeof(int)*len);
     checkCudaErrors(cudaMemcpy(h_tt, d_i1,sizeof(int)*len, cudaMemcpyDeviceToHost));
     int sum = 0,sum2=0, sum3=0, sum4=0;
     for (int i = 0; i<len; ++i)
