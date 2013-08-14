@@ -289,21 +289,48 @@ void your_blend(const uchar4* const h_sourceImg, //IN
     int *d_i1, *d_i2;
     checkCudaErrors(cudaMalloc((void **)&d_i1, sizeof(int)*len));
     checkCudaErrors(cudaMalloc((void **)&d_i2, sizeof(int)*len));
-
+    dim3 G(r,c,1), B(xdim,ydim,1)
     float *d_dr, *d_dg, *d_db;
     checkCudaErrors(cudaMalloc((void **)&d_dr, sizeof(float)*len));
     checkCudaErrors(cudaMalloc((void **)&d_dg, sizeof(float)*len));
     checkCudaErrors(cudaMalloc((void **)&d_db, sizeof(float)*len));
-    routine0 <<<dim3(r,c,1), dim3(xdim,ydim,1) >>> (
+    routine0 <<<G,B >>> (
             d_dst,d_dr, d_dg, d_db, numRowsSource, numColsSource );
     checkCudaErrors(cudaDeviceSynchronize()); checkCudaErrors(cudaGetLastError());
     
-    routine1 <<<dim3(r,c,1), dim3(xdim,ydim,1) >>> (
+    routine1 <<<G,B>>> (
             d_src,d_i1, d_r1, d_g1, d_b1, numRowsSource, numColsSource );
     checkCudaErrors(cudaDeviceSynchronize()); checkCudaErrors(cudaGetLastError());
     
-    routine2 <<<dim3(r,c,1), dim3(xdim,ydim,1) >>> (d_i1, d_i2, numRowsSource, numColsSource );
+    routine2 <<<G,B >>> (d_i1, d_i2, numRowsSource, numColsSource );
     checkCudaErrors(cudaDeviceSynchronize()); checkCudaErrors(cudaGetLastError());
+
+    cudaFree(d_i1);
+
+    cudaStream_t sa, sb, sc;
+    cudaStreamCreate(&sa);
+    cudaStreamCreate(&sb);
+    cudaStreamCreate(&sc);
+
+    cudaMallocAsync((void**) &d_r2,sizeof(float)*len, sa);
+    cudaMemcpyAsync(d_r2, d_r1, sizeof(float)*len, cudaMemcpyDeviceToDevice,sa);
+
+    cudaMallocAsync((void**) &d_g2,sizeof(float)*len, sb);
+    cudaMemcpyAsync(d_g2, d_g1, sizeof(float)*len, cudaMemcpyDeviceToDevice,sb);
+
+    cudaMallocAsync((void**) &d_b2,sizeof(float)*len, sc);
+    cudaMemcpyAsync(d_b2, d_b1, sizeof(float)*len, cudaMemcpyDeviceToDevice,sc);
+
+    for (int i =0; i<1; ++i)
+    {
+        jacobi <<<G,B,0,sa>>> (d_r1, d_r2, d_dr1, d_i2, numRowsSource,numColsSource );
+        jacobi <<<G,B,0,sb>>> (d_g1, d_g2, d_dg1, d_i2, numRowsSource,numColsSource );
+        jacobi <<<G,B,0,sc>>> (d_b1, d_b2, d_db1, d_i2, numRowsSource,numColsSource );
+        swap <<<dim3(1,1,1), dim3(1,1,1),0,sa>>> (d_r1,d_r2, numRowsSource, numColsSource);
+        swap <<<dim3(1,1,1), dim3(1,1,1),0,sb>>> (d_g1,d_g2, numRowsSource, numColsSource);
+        swap <<<dim3(1,1,1), dim3(1,1,1),0,sc>>> (d_b1,d_b2, numRowsSource, numColsSource);
+    }
+    checkCudaErrors(cudaDeviceSynchronize());
 
     int* h_tt = (int*) malloc(sizeof(int)*len);
     checkCudaErrors(cudaMemcpy(h_tt, d_i1,sizeof(int)*len, cudaMemcpyDeviceToHost));
