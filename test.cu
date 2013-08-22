@@ -3,5 +3,5 @@ int main ()
 {
     testclsinit t;
     t.test();
-    return 1;
+    return 0;
 };

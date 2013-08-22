@@ -89,7 +89,7 @@ class ParallelComputeThrust
 
     public:
         template <class f >
-        void map (S_2d arr, const int len)
+        void map (S_1d arr, const int len)
         {
             thrust::transform (arr.begin(), arr.end(),arr.begin(),f());
         };
