@@ -1,7 +1,7 @@
 #include "test2.h"
 int main ()
 {
-    testcls < ParallelDataThrust, GPUMemoryThrust > t;
+    testclsinit t;
     t.test();
     return 1;
 };
