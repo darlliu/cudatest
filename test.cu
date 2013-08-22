@@ -1,10 +1,7 @@
-#include "test.h"
+#include "test2.h"
 int main ()
 {
-    GPUMemoryThrust mems;
-    thrust::device_vector <int> tmp (16);
-    //errors below
-    mems.free < device_vector<int> > (int);
-    mems.template free < device_vector<int> > (int);
+    testcls < ParallelDataThrust, GPUMemoryThrust > t;
+    t.test();
     return 1;
 };
