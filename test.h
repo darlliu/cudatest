@@ -1,14 +1,6 @@
 #include <thrust/device_vector.h>
 using thrust::device_vector;
 
-class ParallelDataThrust
-{
-    public:
-        typedef int Int;
-        typedef float Float;
-        typedef device_vector<int> Int_1d;
-        typedef device_vector<float> Float_1d;
-};
 class GPUMemoryThrust
 {
     public:
@@ -18,10 +10,17 @@ class GPUMemoryThrust
             return S_1d(sz);
         };
         template <typename S_1d> void free (S_1d in){};
-        template <typename S_2d> void free (S_2d in,const int len){};
         // memory is self managed by thrust
 };
 /*
+class ParallelDataThrust
+{
+    public:
+        typedef int Int;
+        typedef float Float;
+        typedef device_vector<int> Int_1d;
+        typedef device_vector<float> Float_1d;
+};
 template <class Data>
 class ParallelComputeThrust
 {
