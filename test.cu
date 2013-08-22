@@ -1,4 +1,4 @@
-#include "Parallel_Thrust.h"
+#include "test.h"
 
 struct zero
 {
@@ -13,7 +13,7 @@ int main ()
 {
     ParallelDataThrust types;
     GPUMemoryThrust mems;
-    ParallelComputeThrust<ParallelDataThrust> computes;
+    /*ParallelComputeThrust<ParallelDataThrust> computes;*/
     thrust::device_vector <int> tmp (16);
     mems.free < device_vector<int> > (int);
     return 1;
