@@ -1,17 +1,6 @@
-//Policy classes using only the thrust library to provide for
-//parallel acceleration. Uses device memory and containers.
-//Note: The device vector provided by thrust can be directed accessed
-//from host. This is NOT the expected behavior of any other parallel implementation.
-//
-//This is mainly useful for porting initial parallel code.
-//
-
 #include <thrust/device_vector.h>
-
-// Here we overwrite the null value for consistency with thrust vectors
-//
-
 using thrust::device_vector;
+
 class ParallelDataThrust
 {
     public:
@@ -20,7 +9,6 @@ class ParallelDataThrust
         typedef device_vector<int> Int_1d;
         typedef device_vector<float> Float_1d;
 };
-
 class GPUMemoryThrust
 {
     public:
